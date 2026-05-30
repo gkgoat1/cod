@@ -48,6 +48,13 @@ const ANSI_COLOR_BY_CODE: Record<number, string> = {
 };
 
 export const keyToTerminalInput = (event: KeyboardEvent) => {
+  const key = event.key.toLowerCase();
+  const selection = event.view?.getSelection();
+  const hasSelection = selection ? !selection.isCollapsed : false;
+
+  if (event.ctrlKey && key === 'v') return undefined;
+  if (event.ctrlKey && key === 'c' && hasSelection) return undefined;
+
   if (event.ctrlKey && event.key.length === 1) {
     const code = event.key.toUpperCase().charCodeAt(0) - 64;
     if (code >= 1 && code <= 26) return String.fromCharCode(code);
@@ -168,12 +175,6 @@ export const renderTerminal = (terminal: TerminalWindow) => {
       ensureRow();
     } else if (char === '\b' || char === '\x7f') {
       column = Math.max(0, column - 1);
-      const current = ensureRow();
-      if (column === current.length - 1) {
-        current.length = column;
-      } else if (current[column]) {
-        current[column] = { text: ' ', foreground: '', bold: false };
-      }
     } else if (char === '\t') {
       const nextTabStop = column + (8 - (column % 8));
       while (column < nextTabStop) write(' ');

@@ -42,6 +42,18 @@
   const REMOTE_DISPLAY_MAX_HEIGHT = 1080;
   const REMOTE_WINDOWS = 'COD_WINDOWS ';
   const RELATIVE_MOUSE_ID = 'task-relative-mouse';
+  const desktopEnvCommand = String.raw`export DISPLAY=:99
+export XDG_RUNTIME_DIR="$HOME/.local/run"
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 700 "$XDG_RUNTIME_DIR"
+if [ -r "$HOME/.cod-desktop-env" ]; then
+  . "$HOME/.cod-desktop-env"
+fi
+export NO_AT_BRIDGE=1
+export GTK_A11Y=none
+export GTK_MODULES=
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"`;
+  const withDesktopEnv = (command: string) => `${desktopEnvCommand}\n${command}`;
   const firefoxInstallCommand = String.raw`set -euo pipefail
 echo "Installing Firefox..."
 export PATH="$HOME/.local/bin:$PATH"
@@ -50,7 +62,6 @@ APP_DIR="$HOME/.local"
 APPLICATIONS_DIR="$HOME/.local/share/applications"
 mkdir -p "$BIN_DIR" "$APP_DIR" "$APPLICATIONS_DIR"
 BROWSER="$APP_DIR/firefox/firefox"
-FIREFOX_BIN="$APP_DIR/firefox/firefox-bin"
 DESKTOP_FILE="$APPLICATIONS_DIR/firefox.desktop"
 
 if [ ! -x "$BROWSER" ]; then
@@ -91,7 +102,7 @@ Encoding=UTF-8
 Version=1.0
 Type=Application
 NoDisplay=true
-Exec=$FIREFOX_BIN %u
+Exec=$BROWSER %u
 Name=Firefox
 Comment=Custom definition for Firefox
 Icon=$APP_DIR/firefox/browser/chrome/icons/default/default128.png
@@ -232,6 +243,50 @@ subprocess.run([launcher, '--version'], timeout=30, check=True)
 print('Prism is ready:', launcher, flush=True)
 PY
 `;
+  const opencodeInstallCommand = String.raw`set -euo pipefail
+echo "Installing opencode..."
+URL="https://github.com/anomalyco/opencode/releases/latest/download/opencode-linux-x64.tar.gz"
+BIN_DIR="$HOME/.local/bin"
+APP_DIR="$HOME/.local/opencode"
+TARGET="$BIN_DIR/opencode"
+ARCHIVE="$(mktemp /tmp/opencode-linux-x64.XXXXXX.tar.gz)"
+EXTRACT_DIR="$(mktemp -d /tmp/opencode-install.XXXXXX)"
+mkdir -p "$BIN_DIR" "$APP_DIR"
+cleanup() {
+  rm -rf "$ARCHIVE" "$EXTRACT_DIR"
+}
+trap cleanup EXIT
+
+echo "Downloading latest opencode from $URL..."
+if command -v curl >/dev/null 2>&1; then
+  curl -L --fail --retry 2 --max-time 180 -o "$ARCHIVE" "$URL"
+elif command -v wget >/dev/null 2>&1; then
+  wget -O "$ARCHIVE" "$URL"
+else
+  OPENCODE_URL="$URL" OPENCODE_ARCHIVE="$ARCHIVE" python3 - <<'PY'
+import os
+import shutil
+import urllib.request
+
+req = urllib.request.Request(os.environ['OPENCODE_URL'], headers={'User-Agent': 'cod-opencode-bootstrap/1'})
+with urllib.request.urlopen(req, timeout=180) as response, open(os.environ['OPENCODE_ARCHIVE'], 'wb') as f:
+    if response.status != 200:
+        raise RuntimeError(f'unexpected opencode response: {response.status}')
+    shutil.copyfileobj(response, f)
+PY
+fi
+
+echo "Extracting opencode..."
+tar -xzf "$ARCHIVE" -C "$EXTRACT_DIR"
+if [ ! -f "$EXTRACT_DIR/opencode" ]; then
+  echo "Error: opencode archive did not contain a root opencode executable" >&2
+  exit 1
+fi
+cp "$EXTRACT_DIR/opencode" "$TARGET"
+chmod 755 "$TARGET"
+"$TARGET" --version
+echo "opencode is ready: $TARGET"
+`;
   const relativeMouseCommand = String.raw`set -euo pipefail
 export DISPLAY=:99
 for _ in $(seq 1 1200); do
@@ -306,6 +361,7 @@ exec python3 -u "$HELPER"
 `;
   const remoteProgram = String.raw`import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -316,9 +372,21 @@ import time
 HOME = os.environ.get('HOME') or '/home/karel'
 BIN_DIR = os.path.join(HOME, '.local', 'bin')
 WM_DIR = os.path.join(HOME, '.local', 'codehs-wm')
+RUNTIME_DIR = os.path.join(HOME, '.local', 'run')
+DESKTOP_ENV_FILE = os.path.join(HOME, '.cod-desktop-env')
+DBUS_BUS_PATH = os.path.join(RUNTIME_DIR, 'bus')
+DBUS_BUS_ADDRESS = 'unix:path=' + DBUS_BUS_PATH
 os.makedirs(BIN_DIR, exist_ok=True)
 os.makedirs(WM_DIR, exist_ok=True)
+os.makedirs(RUNTIME_DIR, exist_ok=True)
+os.chmod(RUNTIME_DIR, 0o700)
 os.environ['PATH'] = BIN_DIR + ':' + os.environ.get('PATH', '')
+os.environ['DISPLAY'] = ':99'
+os.environ['XDG_RUNTIME_DIR'] = RUNTIME_DIR
+os.environ['DBUS_SESSION_BUS_ADDRESS'] = DBUS_BUS_ADDRESS
+os.environ['NO_AT_BRIDGE'] = '1'
+os.environ['GTK_A11Y'] = 'none'
+os.environ['GTK_MODULES'] = ''
 
 GRAPHICS_WIDTH = 1920
 GRAPHICS_HEIGHT = 1080
@@ -347,6 +415,35 @@ def run(cmd, timeout=60, cwd=None, env=None, quiet=False):
         if not quiet:
             say('Command failed:', type(exc).__name__, str(exc))
         return False, '', str(exc)
+
+def sh_quote(value):
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+def write_desktop_env():
+    with open(DESKTOP_ENV_FILE, 'w') as f:
+        for key in ['DISPLAY', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS', 'NO_AT_BRIDGE', 'GTK_A11Y', 'GTK_MODULES']:
+            f.write('export {}={}\n'.format(key, sh_quote(os.environ.get(key, ''))))
+
+def start_session_bus():
+    run(['pkill', '-f', 'dbus-daemon --session --address=' + DBUS_BUS_ADDRESS], timeout=5, quiet=True)
+    try:
+        os.remove(DBUS_BUS_PATH)
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        say('Warning: could not remove stale D-Bus socket', type(exc).__name__, str(exc))
+
+    start_background(
+        ['dbus-daemon', '--session', '--address=' + DBUS_BUS_ADDRESS, '--nofork', '--nopidfile'],
+        '/tmp/cod-dbus.log',
+    )
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        if os.path.exists(DBUS_BUS_PATH):
+            say('Session D-Bus is ready:', DBUS_BUS_ADDRESS)
+            return
+        time.sleep(0.1)
+    say('Warning: session D-Bus socket did not appear')
 
 def download(url, path, timeout=120):
     return run(['curl', '-L', '--fail', '--max-time', str(timeout - 20), '-o', path, url], timeout=timeout)[0]
@@ -529,6 +626,8 @@ def watch_windows():
         time.sleep(1)
 
 say('Starting desktop services')
+write_desktop_env()
+start_session_bus()
 restart_graphics_stack()
 try:
     subprocess.run(['xsetroot', '-solid', '#00120a'], timeout=5)
@@ -976,6 +1075,11 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
         prismInstalled = true;
       },
     });
+    startTaskTerminal({
+      id: 'task-opencode-install',
+      title: 'Installing opencode',
+      command: opencodeInstallCommand,
+    });
     await loadScript(appWindow.document, NOVNC_SCRIPT_URL);
     if (!appWindow.RFB) throw new Error('noVNC RFB global did not load');
 
@@ -1045,14 +1149,6 @@ xprop -root _NET_SUPPORTING_WM_CHECK >/dev/null
       title: 'Launching Prism Launcher',
       command: `set -euo pipefail
 PRISM="$HOME/.local/bin/prismlauncher"
-RUNTIME="$HOME/.local/run"
-mkdir -p "$RUNTIME"
-chmod 700 "$RUNTIME"
-export DISPLAY=:99
-export XDG_RUNTIME_DIR="$RUNTIME"
-export NO_AT_BRIDGE=1
-export GTK_A11Y=none
-export GTK_MODULES=
 export QT_XCB_GL_INTEGRATION="\${QT_XCB_GL_INTEGRATION:-none}"
 export QT_LOGGING_RULES="\${QT_LOGGING_RULES:-qt.qpa.*=true}"
 export LIBGL_ALWAYS_SOFTWARE="\${LIBGL_ALWAYS_SOFTWARE:-1}"
@@ -1089,9 +1185,10 @@ xprop -root _NET_SUPPORTING_WM_CHECK >/dev/null
     activeTerminalTab = id;
     openTerminalApp(id);
 
-    session.spawnCommand(id, 'exec bash -l', {
+    const command = withDesktopEnv('exec bash -l');
+    session.spawnCommand(id, command, {
       type: 'echopty',
-      args: ['-l'],
+      args: ['-lc', command],
       untracked: true,
     });
   };
@@ -1216,8 +1313,12 @@ PY`,
       throw new Error(`cannot start ${id}: terminal already exists`);
     }
     const marker = `COD_TASK_EXIT ${id} `;
-    const wrappedCommand = `set +e\n(\n${command}\n)\ncode=$?\necho "${marker}$code"\nexit 0`;
-    const spawnCommand = track ? wrappedCommand : command;
+    const commandWithDesktopEnv = withDesktopEnv(command);
+    const wrappedCommand = `set +e\n(\n${commandWithDesktopEnv}\n)\ncode=$?\necho "${marker}$code"\nexit 0`;
+    const spawnCommand = track ? wrappedCommand : commandWithDesktopEnv;
+    const spawnArgs = args
+      ? args.map((arg) => (arg === command ? commandWithDesktopEnv : arg))
+      : ['-lc', spawnCommand];
 
     terminals = [
       ...terminals,
@@ -1238,7 +1339,7 @@ PY`,
     try {
       result = session.spawnCommand(id, spawnCommand, {
         type: type ?? 'echopty',
-        args: args ?? ['-lc', spawnCommand],
+        args: spawnArgs,
         env,
         untracked: !track,
         resolveOnOutput: (text) => text.includes(`${marker}0`),

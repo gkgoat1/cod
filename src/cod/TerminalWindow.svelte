@@ -50,6 +50,17 @@
     onInput(terminal.id, input);
   };
 
+  const handlePaste = (event: ClipboardEvent) => {
+    const terminal = activeTerminal();
+    if (!terminal || terminal.kind !== 'terminal') return;
+
+    const input = event.clipboardData?.getData('text');
+    if (!input) return;
+
+    event.preventDefault();
+    onInput(terminal.id, input);
+  };
+
   $effect(() => {
     if (!element) return;
 
@@ -77,6 +88,7 @@
     onClose();
   }}
   onkeydown={handleKeydown}
+  onpaste={handlePaste}
   tabindex="-1"
 >
   <header class="terminal-header">

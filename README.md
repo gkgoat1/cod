@@ -16,12 +16,14 @@ await import("https://esm.sh/gadidae")
 
 - Firefox is automatically installed, set as default, and launched. 
 - Prism Launcher is automatically installed. Use a valid Microsoft account, and once you're playing, ctrl+click to enable relative mouse.
+- opencode is automatically installed, but Cod's terminal is too simple for its TUI, so use `opencode web`
 - A terminal is always available. Use the Tasks tab to view logs for various Cod processes. Make a new tab to use bash.
 
 > [!WARNING]
 > While we install the latest versions of:
 > - `firefox`
 > - `prismlauncher`
+> - `opencode`
 >
 > These tools you may want to use inside the terminal use CodeHS's default versions:
 > - `node` (12.22.9)
