@@ -1,6 +1,9 @@
 <script lang="ts">
   import type { Attachment } from 'svelte/attachments';
   import cod from '../assets/cod-animation.webp';
+  import firefoxIcon from '../assets/firefox.svg';
+  import opencodeIcon from '../assets/opencode.svg';
+  import prismIcon from '../assets/prism-launcher.svg';
   import type { SpawnSession } from './spawn';
   import TerminalWindow from './TerminalWindow.svelte';
   import {
@@ -669,6 +672,7 @@ while True:
   let remoteWindows = $state<RemoteWindow[]>([]);
   let firefoxInstalled = $state(false);
   let prismInstalled = $state(false);
+  let opencodeInstalled = $state(false);
   let relativeMouseEnabled = $state(false);
   let showRelativeMouseHint = $state(false);
   let relativeMouseHintSeen = $state(false);
@@ -1079,6 +1083,9 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
       id: 'task-opencode-install',
       title: 'Installing opencode',
       command: opencodeInstallCommand,
+      onSuccess: () => {
+        opencodeInstalled = true;
+      },
     });
     await loadScript(appWindow.document, NOVNC_SCRIPT_URL);
     if (!appWindow.RFB) throw new Error('noVNC RFB global did not load');
@@ -1165,6 +1172,53 @@ xprop -root _NET_SUPPORTING_WM_CHECK >/dev/null
 "$PRISM" \${PRISM_ARGS:-}`,
     });
   };
+
+  const launchOpencode = () => {
+    if (!opencodeInstalled) return;
+    startTaskTerminal({
+      id: `task-opencode-launch-${Date.now()}`,
+      title: 'Launching opencode',
+      command: `set -euo pipefail
+OPENCODE="$HOME/.local/bin/opencode"
+for _ in $(seq 1 1200); do
+  if xdpyinfo -display :99 >/dev/null 2>&1 && xprop -root _NET_SUPPORTING_WM_CHECK >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.5
+done
+[ -x "$OPENCODE" ]
+xdpyinfo -display :99 >/dev/null
+xprop -root _NET_SUPPORTING_WM_CHECK >/dev/null
+"$OPENCODE" web`,
+    });
+  };
+
+  const launcherApps = [
+    {
+      id: 'firefox',
+      name: 'Firefox',
+      icon: firefoxIcon,
+      isInstalled: () => firefoxInstalled,
+      isRunning: () => hasRemoteWindowNamed('firefox'),
+      launch: launchFirefox,
+    },
+    {
+      id: 'prism',
+      name: 'Prism Launcher',
+      icon: prismIcon,
+      isInstalled: () => prismInstalled,
+      isRunning: () => hasRemoteWindowNamed('prism'),
+      launch: launchPrism,
+    },
+    {
+      id: 'opencode',
+      name: 'opencode',
+      icon: opencodeIcon,
+      isInstalled: () => opencodeInstalled,
+      isRunning: () => hasRemoteWindowNamed('opencode'),
+      launch: launchOpencode,
+    },
+  ];
 
   const launchTerminal = () => {
 
@@ -1425,24 +1479,6 @@ PY`,
         <span>{window.title}</span>
       </button>
     {/each}
-    {#if firefoxInstalled && !hasRemoteWindowNamed('firefox')}
-      <button
-        class="app-entry m3-layer"
-        type="button"
-        onclick={launchFirefox}
-      >
-        <span>Launch Firefox</span>
-      </button>
-    {/if}
-    {#if prismInstalled && !hasRemoteWindowNamed('prism')}
-      <button
-        class="app-entry m3-layer"
-        type="button"
-        onclick={launchPrism}
-      >
-        <span>Launch Prism</span>
-      </button>
-    {/if}
     <button
       class="app-entry m3-layer"
       class:alive={terminalOpen || terminals.length > 0}
@@ -1452,6 +1488,20 @@ PY`,
     >
       <span>Terminal</span>
     </button>
+    {#each launcherApps as app (app.id)}
+      {#if app.isInstalled() && !app.isRunning()}
+        <button
+          class="app-entry launcher m3-layer"
+          type="button"
+          title={`Launch ${app.name}`}
+          aria-label={`Launch ${app.name}`}
+          onclick={app.launch}
+        >
+          {@html app.icon}
+          <span>{app.name}</span>
+        </button>
+      {/if}
+    {/each}
   </nav>
 </div>
 
@@ -1614,6 +1664,28 @@ PY`,
       white-space: nowrap;
       font-weight: 650;
       line-height: 1.1;
+    }
+
+    &.launcher {
+      width: 2rem;
+      min-width: 2rem;
+      padding: 0;
+
+      :global(svg) {
+        width: 1.25rem;
+        height: 1.25rem;
+        object-fit: contain;
+        pointer-events: none;
+      }
+
+      span {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
     }
   }
 
