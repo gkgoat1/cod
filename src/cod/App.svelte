@@ -76,22 +76,7 @@ if [ ! -x "$BROWSER" ]; then
   }
   trap cleanup EXIT
   echo "Downloading Firefox from Mozilla..."
-  if command -v curl >/dev/null 2>&1; then
-    curl -L --fail --retry 2 --max-time 90 -o "$ARCHIVE" "$URL"
-  elif command -v wget >/dev/null 2>&1; then
-    wget -O "$ARCHIVE" "$URL"
-  else
-    python3 - <<'PY'
-import urllib.request
-url = 'https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US'
-with urllib.request.urlopen(url) as response:
-    content_type = response.headers.get('content-type', '')
-    if response.status != 200:
-        raise RuntimeError(f'unexpected Firefox response: {response.status} {content_type}')
-    with open('/tmp/firefox.tar.xz', 'wb') as f:
-        f.write(response.read())
-PY
-  fi
+  curl -L --fail --retry 2 --max-time 90 -o "$ARCHIVE" "$URL"
   echo "Extracting Firefox..."
   tar -xf "$ARCHIVE" -C "$EXTRACT_DIR"
   rm -rf "$APP_DIR/firefox"
@@ -114,137 +99,99 @@ StartupWMClass=firefox
 EOF
 chmod 644 "$DESKTOP_FILE"
 mkdir -p "$HOME/.config"
-python3 - <<'PY'
-import configparser
-import os
+MIMEAPPS="$HOME/.config/mimeapps.list"
+cat > "$MIMEAPPS" <<EOF
+[Default Applications]
+x-scheme-handler/http=firefox.desktop
+x-scheme-handler/https=firefox.desktop
+x-scheme-handler/chrome=firefox.desktop
+text/html=firefox.desktop
+application/x-extension-htm=firefox.desktop
+application/x-extension-html=firefox.desktop
+application/x-extension-shtml=firefox.desktop
+application/xhtml+xml=firefox.desktop
+application/x-extension-xhtml=firefox.desktop
+application/x-extension-xht=firefox.desktop
 
-home = os.environ['HOME']
-path = os.path.join(home, '.config', 'mimeapps.list')
-defaults = {
-    'x-scheme-handler/http': 'firefox.desktop',
-    'x-scheme-handler/https': 'firefox.desktop',
-    'x-scheme-handler/chrome': 'firefox.desktop',
-    'text/html': 'firefox.desktop',
-    'application/x-extension-htm': 'firefox.desktop',
-    'application/x-extension-html': 'firefox.desktop',
-    'application/x-extension-shtml': 'firefox.desktop',
-    'application/xhtml+xml': 'firefox.desktop',
-    'application/x-extension-xhtml': 'firefox.desktop',
-    'application/x-extension-xht': 'firefox.desktop',
-}
-config = configparser.RawConfigParser(strict=False, delimiters=('='))
-config.optionxform = str
-config.read(path)
-for section, suffix in [('Default Applications', ''), ('Added Associations', ';')]:
-    if not config.has_section(section):
-        config.add_section(section)
-    for key, value in defaults.items():
-        config.set(section, key, value + suffix)
-with open(path, 'w') as f:
-    config.write(f, space_around_delimiters=False)
-PY
+[Added Associations]
+x-scheme-handler/http=firefox.desktop;
+x-scheme-handler/https=firefox.desktop;
+x-scheme-handler/chrome=firefox.desktop;
+text/html=firefox.desktop;
+application/x-extension-htm=firefox.desktop;
+application/x-extension-html=firefox.desktop;
+application/x-extension-shtml=firefox.desktop;
+application/xhtml+xml=firefox.desktop;
+application/x-extension-xhtml=firefox.desktop;
+application/x-extension-xht=firefox.desktop;
+EOF
 
 "$BROWSER" --version
 echo "Firefox is ready: $BROWSER"
 `;
   const prismInstallCommand = String.raw`set -euo pipefail
 echo "Installing Prism Launcher..."
-python3 - <<'PY'
-import json
-import os
-import shutil
-import subprocess
-import tarfile
-import urllib.request
+RELEASE_API="https://api.github.com/repos/PrismLauncher/PrismLauncher/releases/latest"
+FALLBACK_URL="https://github.com/PrismLauncher/PrismLauncher/releases/download/11.0.2/PrismLauncher-Linux-Qt6-Portable-11.0.2.tar.gz"
+APP_ROOT="$HOME/.local/prism"
+BIN_DIR="$HOME/.local/bin"
+EXTRACT_DIR="$APP_ROOT/portable"
+LAUNCHER="$BIN_DIR/prismlauncher"
+mkdir -p "$APP_ROOT" "$BIN_DIR"
 
-release_api = 'https://api.github.com/repos/PrismLauncher/PrismLauncher/releases/latest'
-fallback_url = 'https://github.com/PrismLauncher/PrismLauncher/releases/download/11.0.2/PrismLauncher-Linux-Qt6-Portable-11.0.2.tar.gz'
-home = os.environ.get('HOME') or '/tmp'
-app_root = os.path.join(home, '.local', 'prism')
-bin_dir = os.path.join(home, '.local', 'bin')
-extract_dir = os.path.join(app_root, 'portable')
-launcher = os.path.join(bin_dir, 'prismlauncher')
-os.makedirs(app_root, exist_ok=True)
-os.makedirs(bin_dir, exist_ok=True)
+URL="${'$'}{PRISM_URL:-}"
+if [ -z "$URL" ]; then
+  RELEASE_JSON="$APP_ROOT/latest-release.json"
+  if curl -L --fail --max-time 30 -H "User-Agent: prism-bootstrap/1" -o "$RELEASE_JSON" "$RELEASE_API"; then
+    URL="$(tr ',' '\n' < "$RELEASE_JSON" | sed -n 's/.*"browser_download_url": "\(https:[^"]*PrismLauncher-Linux-Qt6-Portable-[^"]*\.tar\.gz\)".*/\1/p' | sed -n '1p')"
+    if [ -z "$URL" ]; then
+      URL="$(tr ',' '\n' < "$RELEASE_JSON" | sed -n 's/.*"browser_download_url": "\(https:[^"]*PrismLauncher-Linux-x86_64\.AppImage\)".*/\1/p' | sed -n '1p')"
+    fi
+  else
+    echo "Could not look up latest Prism release"
+  fi
+fi
+URL="${'$'}{URL:-$FALLBACK_URL}"
+ARCHIVE_NAME="${'$'}{URL%%\?*}"
+ARCHIVE="$APP_ROOT/${'$'}{ARCHIVE_NAME##*/}"
 
-def download(url, dest, timeout=240):
-    curl = shutil.which('curl')
-    wget = shutil.which('wget')
-    if curl:
-        return subprocess.run([curl, '-L', '--fail', '--max-time', str(timeout), '-o', dest, url]).returncode == 0
-    if wget:
-        return subprocess.run([wget, '-O', dest, url], timeout=timeout + 30).returncode == 0
-    req = urllib.request.Request(url, headers={'User-Agent': 'prism-bootstrap/1'})
-    with urllib.request.urlopen(req, timeout=timeout) as resp, open(dest, 'wb') as f:
-        shutil.copyfileobj(resp, f)
-    return True
+if [ ! -s "$ARCHIVE" ] || [ "$(wc -c < "$ARCHIVE")" -lt 1048576 ]; then
+  echo "Downloading Prism from $URL"
+  TMP="$ARCHIVE.download"
+  rm -f "$TMP"
+  curl -L --fail --max-time 240 -H "User-Agent: prism-bootstrap/1" -o "$TMP" "$URL"
+  mv "$TMP" "$ARCHIVE"
+fi
 
-def latest_url():
-    override = os.environ.get('PRISM_URL')
-    if override:
-        return override
-    try:
-        req = urllib.request.Request(release_api, headers={'User-Agent': 'prism-bootstrap/1'})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            release = json.load(resp)
-        assets = release.get('assets') or []
-        for asset in assets:
-            name = asset.get('name') or ''
-            if name.startswith('PrismLauncher-Linux-Qt6-Portable-') and name.endswith('.tar.gz'):
-                print('Prism release:', release.get('tag_name'), name, flush=True)
-                return asset.get('browser_download_url')
-        for asset in assets:
-            name = asset.get('name') or ''
-            if name == 'PrismLauncher-Linux-x86_64.AppImage':
-                print('Prism AppImage fallback:', release.get('tag_name'), name, flush=True)
-                return asset.get('browser_download_url')
-    except Exception as exc:
-        print('Could not look up latest Prism release:', type(exc).__name__, str(exc), flush=True)
-    return fallback_url
+echo "Prism archive: $ARCHIVE $(wc -c < "$ARCHIVE")"
+rm -rf "$EXTRACT_DIR"
+mkdir -p "$EXTRACT_DIR"
+case "$ARCHIVE" in
+  *.AppImage)
+    chmod +x "$ARCHIVE"
+    (cd "$EXTRACT_DIR" && "$ARCHIVE" --appimage-extract)
+    ;;
+  *)
+    tar -xzf "$ARCHIVE" -C "$EXTRACT_DIR"
+    ;;
+esac
 
-def find_prism(root):
-    names = {'prismlauncher', 'PrismLauncher', 'prismlauncher.bin'}
-    for dirpath, _dirs, files in os.walk(root):
-        for name in files:
-            if name in names:
-                path = os.path.join(dirpath, name)
-                os.chmod(path, os.stat(path).st_mode | 0o111)
-                return path
-    return None
-
-url = latest_url()
-archive = os.path.join(app_root, os.path.basename(url.split('?', 1)[0]) or 'prism.tar.gz')
-if not os.path.exists(archive) or os.path.getsize(archive) < 1024 * 1024:
-    print('Downloading Prism from', url, flush=True)
-    tmp = archive + '.download'
-    if os.path.exists(tmp):
-        os.remove(tmp)
-    if not download(url, tmp):
-        raise RuntimeError('failed to download Prism')
-    os.replace(tmp, archive)
-
-print('Prism archive:', archive, os.path.getsize(archive), flush=True)
-shutil.rmtree(extract_dir, ignore_errors=True)
-os.makedirs(extract_dir, exist_ok=True)
-if archive.endswith('.AppImage'):
-    os.chmod(archive, os.stat(archive).st_mode | 0o111)
-    result = subprocess.run([archive, '--appimage-extract'], cwd=extract_dir)
-    if result.returncode != 0:
-        raise RuntimeError('failed to extract Prism AppImage')
-else:
-    with tarfile.open(archive, 'r:gz') as tar:
-        tar.extractall(extract_dir)
-
-prism = find_prism(extract_dir)
-if not prism:
-    raise RuntimeError('could not find Prism executable after extraction')
-
-with open(launcher, 'w') as f:
-    f.write('#!/bin/sh\nexec "{}" "$@"\n'.format(prism))
-os.chmod(launcher, 0o755)
-subprocess.run([launcher, '--version'], timeout=30, check=True)
-print('Prism is ready:', launcher, flush=True)
-PY
+PRISM=""
+for NAME in prismlauncher PrismLauncher prismlauncher.bin; do
+  PRISM="$(find "$EXTRACT_DIR" -type f -name "$NAME" -print -quit)"
+  if [ -n "$PRISM" ]; then
+    break
+  fi
+done
+if [ -z "$PRISM" ]; then
+  echo "Error: could not find Prism executable after extraction" >&2
+  exit 1
+fi
+chmod +x "$PRISM"
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$PRISM" > "$LAUNCHER"
+chmod 755 "$LAUNCHER"
+"$LAUNCHER" --version
+echo "Prism is ready: $LAUNCHER"
 `;
   const opencodeInstallCommand = String.raw`set -euo pipefail
 echo "Installing opencode..."
@@ -261,23 +208,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Downloading latest opencode from $URL..."
-if command -v curl >/dev/null 2>&1; then
-  curl -L --fail --retry 2 --max-time 180 -o "$ARCHIVE" "$URL"
-elif command -v wget >/dev/null 2>&1; then
-  wget -O "$ARCHIVE" "$URL"
-else
-  OPENCODE_URL="$URL" OPENCODE_ARCHIVE="$ARCHIVE" python3 - <<'PY'
-import os
-import shutil
-import urllib.request
-
-req = urllib.request.Request(os.environ['OPENCODE_URL'], headers={'User-Agent': 'cod-opencode-bootstrap/1'})
-with urllib.request.urlopen(req, timeout=180) as response, open(os.environ['OPENCODE_ARCHIVE'], 'wb') as f:
-    if response.status != 200:
-        raise RuntimeError(f'unexpected opencode response: {response.status}')
-    shutil.copyfileobj(response, f)
-PY
-fi
+curl -L --fail --retry 2 --max-time 180 -o "$ARCHIVE" "$URL"
 
 echo "Extracting opencode..."
 tar -xzf "$ARCHIVE" -C "$EXTRACT_DIR"
