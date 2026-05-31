@@ -65,6 +65,7 @@ APP_DIR="$HOME/.local"
 APPLICATIONS_DIR="$HOME/.local/share/applications"
 mkdir -p "$BIN_DIR" "$APP_DIR" "$APPLICATIONS_DIR"
 BROWSER="$APP_DIR/firefox/firefox"
+BROWSER_BIN="$APP_DIR/firefox/firefox-bin"
 DESKTOP_FILE="$APPLICATIONS_DIR/firefox.desktop"
 
 if [ ! -x "$BROWSER" ]; then
@@ -90,7 +91,7 @@ Encoding=UTF-8
 Version=1.0
 Type=Application
 NoDisplay=true
-Exec=$BROWSER %u
+Exec=$BROWSER_BIN %u
 Name=Firefox
 Comment=Custom definition for Firefox
 Icon=$APP_DIR/firefox/browser/chrome/icons/default/default128.png
