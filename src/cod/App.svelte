@@ -253,10 +253,14 @@ def handle_x_io_error(display):
     print('Relative mouse X IO error', flush=True)
     return 0
 
+x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
 x11.XOpenDisplay.restype = ctypes.c_void_p
 x11.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
+x11.XSync.restype = ctypes.c_int
 x11.XSetErrorHandler.argtypes = [XErrorHandler]
+x11.XSetErrorHandler.restype = ctypes.c_void_p
 x11.XSetIOErrorHandler.argtypes = [XIOErrorHandler]
+x11.XSetIOErrorHandler.restype = ctypes.c_void_p
 xtst.XTestFakeRelativeMotionEvent.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_ulong]
 xtst.XTestFakeRelativeMotionEvent.restype = ctypes.c_int
 xtst.XTestFakeButtonEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
@@ -1220,9 +1224,20 @@ class XEvent(ctypes.Union):
     ]
 
 x11 = ctypes.cdll.LoadLibrary('libX11.so.6')
+x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
 x11.XOpenDisplay.restype = ctypes.c_void_p
+x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
 x11.XDefaultRootWindow.restype = ctypes.c_ulong
+x11.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
 x11.XInternAtom.restype = ctypes.c_ulong
+x11.XSendEvent.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_long, ctypes.POINTER(XEvent)]
+x11.XSendEvent.restype = ctypes.c_int
+x11.XRaiseWindow.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+x11.XRaiseWindow.restype = ctypes.c_int
+x11.XFlush.argtypes = [ctypes.c_void_p]
+x11.XFlush.restype = ctypes.c_int
+x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+x11.XCloseDisplay.restype = ctypes.c_int
 
 display = x11.XOpenDisplay(None)
 if not display:
