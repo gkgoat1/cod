@@ -10,6 +10,12 @@
     type TerminalLine,
     type TerminalWindow as TerminalWindowModel,
   } from './terminal';
+  import { script as desktopEnvCommand } from './scripts/desktop-env.sh';
+  import { script as firefoxInstallCommand } from './scripts/firefox.sh';
+  import { script as prismInstallCommand } from './scripts/prism.sh';
+  import { script as opencodeInstallCommand } from './scripts/opencode.sh';
+  import { script as relativeMouseCommand } from './scripts/relm.sh';
+  import { script as remoteProgram } from './scripts/remote.py';
 
   type RemoteWindow = {
     id: string;
@@ -45,559 +51,8 @@
   const REMOTE_DISPLAY_MAX_HEIGHT = 1080;
   const REMOTE_WINDOWS = 'COD_WINDOWS ';
   const RELATIVE_MOUSE_ID = 'task-relative-mouse';
-  const desktopEnvCommand = String.raw`export DISPLAY=:99
-export XDG_RUNTIME_DIR="$HOME/.local/run"
-mkdir -p "$XDG_RUNTIME_DIR"
-chmod 700 "$XDG_RUNTIME_DIR"
-if [ -r "$HOME/.cod-desktop-env" ]; then
-  . "$HOME/.cod-desktop-env"
-fi
-export NO_AT_BRIDGE=1
-export GTK_A11Y=none
-export GTK_MODULES=
-export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"`;
-  const withDesktopEnv = (command: string) => `${desktopEnvCommand}\n${command}`;
-  const firefoxInstallCommand = String.raw`set -euo pipefail
-echo "Installing Firefox..."
-export PATH="$HOME/.local/bin:$PATH"
-BIN_DIR="$HOME/.local/bin"
-APP_DIR="$HOME/.local"
-APPLICATIONS_DIR="$HOME/.local/share/applications"
-mkdir -p "$BIN_DIR" "$APP_DIR" "$APPLICATIONS_DIR"
-BROWSER="$APP_DIR/firefox/firefox"
-BROWSER_BIN="$APP_DIR/firefox/firefox-bin"
-DESKTOP_FILE="$APPLICATIONS_DIR/firefox.desktop"
-
-if [ ! -x "$BROWSER" ]; then
-  ARCHIVE="/tmp/firefox.tar.xz"
-  EXTRACT_DIR="$(mktemp -d "$APP_DIR/firefox-install.XXXXXX")"
-  URL="https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US"
-  cleanup() {
-    rm -rf "$EXTRACT_DIR"
-  }
-  trap cleanup EXIT
-  echo "Downloading Firefox from Mozilla..."
-  curl -L --fail --retry 2 --max-time 90 -o "$ARCHIVE" "$URL"
-  echo "Extracting Firefox..."
-  tar -xf "$ARCHIVE" -C "$EXTRACT_DIR"
-  rm -rf "$APP_DIR/firefox"
-  mv "$EXTRACT_DIR/firefox" "$APP_DIR/firefox"
-fi
-
-ln -sfn "$BROWSER" "$BIN_DIR/firefox"
-cat > "$DESKTOP_FILE" <<EOF
-[Desktop Entry]
-Encoding=UTF-8
-Version=1.0
-Type=Application
-NoDisplay=true
-Exec=$BROWSER_BIN %u
-Name=Firefox
-Comment=Custom definition for Firefox
-Icon=$APP_DIR/firefox/browser/chrome/icons/default/default128.png
-MimeType=x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/chrome;text/html;application/x-extension-htm;application/x-extension-html;application/x-extension-shtml;application/xhtml+xml;application/x-extension-xhtml;application/x-extension-xht;
-StartupWMClass=firefox
-EOF
-chmod 644 "$DESKTOP_FILE"
-mkdir -p "$HOME/.config"
-MIMEAPPS="$HOME/.config/mimeapps.list"
-cat > "$MIMEAPPS" <<EOF
-[Default Applications]
-x-scheme-handler/http=firefox.desktop
-x-scheme-handler/https=firefox.desktop
-x-scheme-handler/chrome=firefox.desktop
-text/html=firefox.desktop
-application/x-extension-htm=firefox.desktop
-application/x-extension-html=firefox.desktop
-application/x-extension-shtml=firefox.desktop
-application/xhtml+xml=firefox.desktop
-application/x-extension-xhtml=firefox.desktop
-application/x-extension-xht=firefox.desktop
-
-[Added Associations]
-x-scheme-handler/http=firefox.desktop;
-x-scheme-handler/https=firefox.desktop;
-x-scheme-handler/chrome=firefox.desktop;
-text/html=firefox.desktop;
-application/x-extension-htm=firefox.desktop;
-application/x-extension-html=firefox.desktop;
-application/x-extension-shtml=firefox.desktop;
-application/xhtml+xml=firefox.desktop;
-application/x-extension-xhtml=firefox.desktop;
-application/x-extension-xht=firefox.desktop;
-EOF
-
-"$BROWSER" --version
-echo "Firefox is ready: $BROWSER"
-`;
-  const prismInstallCommand = String.raw`set -euo pipefail
-echo "Installing Prism Launcher..."
-RELEASE_API="https://api.github.com/repos/PrismLauncher/PrismLauncher/releases/latest"
-FALLBACK_URL="https://github.com/PrismLauncher/PrismLauncher/releases/download/11.0.2/PrismLauncher-Linux-Qt6-Portable-11.0.2.tar.gz"
-APP_ROOT="$HOME/.local/prism"
-BIN_DIR="$HOME/.local/bin"
-EXTRACT_DIR="$APP_ROOT/portable"
-LAUNCHER="$BIN_DIR/prismlauncher"
-mkdir -p "$APP_ROOT" "$BIN_DIR"
-
-URL="${'$'}{PRISM_URL:-}"
-if [ -z "$URL" ]; then
-  RELEASE_JSON="$APP_ROOT/latest-release.json"
-  if curl -L --fail --max-time 30 -H "User-Agent: prism-bootstrap/1" -o "$RELEASE_JSON" "$RELEASE_API"; then
-    URL="$(tr ',' '\n' < "$RELEASE_JSON" | sed -n 's/.*"browser_download_url": "\(https:[^"]*PrismLauncher-Linux-Qt6-Portable-[^"]*\.tar\.gz\)".*/\1/p' | sed -n '1p')"
-    if [ -z "$URL" ]; then
-      URL="$(tr ',' '\n' < "$RELEASE_JSON" | sed -n 's/.*"browser_download_url": "\(https:[^"]*PrismLauncher-Linux-x86_64\.AppImage\)".*/\1/p' | sed -n '1p')"
-    fi
-  else
-    echo "Could not look up latest Prism release"
-  fi
-fi
-URL="${'$'}{URL:-$FALLBACK_URL}"
-ARCHIVE_NAME="${'$'}{URL%%\?*}"
-ARCHIVE="$APP_ROOT/${'$'}{ARCHIVE_NAME##*/}"
-
-if [ ! -s "$ARCHIVE" ] || [ "$(wc -c < "$ARCHIVE")" -lt 1048576 ]; then
-  echo "Downloading Prism from $URL"
-  TMP="$ARCHIVE.download"
-  rm -f "$TMP"
-  curl -L --fail --max-time 240 -H "User-Agent: prism-bootstrap/1" -o "$TMP" "$URL"
-  mv "$TMP" "$ARCHIVE"
-fi
-
-echo "Prism archive: $ARCHIVE $(wc -c < "$ARCHIVE")"
-rm -rf "$EXTRACT_DIR"
-mkdir -p "$EXTRACT_DIR"
-case "$ARCHIVE" in
-  *.AppImage)
-    chmod +x "$ARCHIVE"
-    (cd "$EXTRACT_DIR" && "$ARCHIVE" --appimage-extract)
-    ;;
-  *)
-    tar -xzf "$ARCHIVE" -C "$EXTRACT_DIR"
-    ;;
-esac
-
-PRISM=""
-for NAME in prismlauncher PrismLauncher prismlauncher.bin; do
-  PRISM="$(find "$EXTRACT_DIR" -type f -name "$NAME" -print -quit)"
-  if [ -n "$PRISM" ]; then
-    break
-  fi
-done
-if [ -z "$PRISM" ]; then
-  echo "Error: could not find Prism executable after extraction" >&2
-  exit 1
-fi
-chmod +x "$PRISM"
-printf '#!/bin/sh\nexec "%s" "$@"\n' "$PRISM" > "$LAUNCHER"
-chmod 755 "$LAUNCHER"
-"$LAUNCHER" --version
-echo "Prism is ready: $LAUNCHER"
-`;
-  const opencodeInstallCommand = String.raw`set -euo pipefail
-echo "Installing opencode..."
-URL="https://github.com/anomalyco/opencode/releases/latest/download/opencode-linux-x64.tar.gz"
-BIN_DIR="$HOME/.local/bin"
-APP_DIR="$HOME/.local/opencode"
-TARGET="$BIN_DIR/opencode"
-ARCHIVE="$(mktemp /tmp/opencode-linux-x64.XXXXXX.tar.gz)"
-EXTRACT_DIR="$(mktemp -d /tmp/opencode-install.XXXXXX)"
-mkdir -p "$BIN_DIR" "$APP_DIR"
-cleanup() {
-  rm -rf "$ARCHIVE" "$EXTRACT_DIR"
-}
-trap cleanup EXIT
-
-echo "Downloading latest opencode from $URL..."
-curl -L --fail --retry 2 --max-time 180 -o "$ARCHIVE" "$URL"
-
-echo "Extracting opencode..."
-tar -xzf "$ARCHIVE" -C "$EXTRACT_DIR"
-if [ ! -f "$EXTRACT_DIR/opencode" ]; then
-  echo "Error: opencode archive did not contain a root opencode executable" >&2
-  exit 1
-fi
-cp "$EXTRACT_DIR/opencode" "$TARGET"
-chmod 755 "$TARGET"
-"$TARGET" --version
-echo "opencode is ready: $TARGET"
-`;
-  const relativeMouseCommand = String.raw`set -euo pipefail
-export DISPLAY=:99
-for _ in $(seq 1 1200); do
-  if xdpyinfo -display :99 >/dev/null 2>&1; then
-    break
-  fi
-  sleep 0.5
-done
-xdpyinfo -display :99 >/dev/null
-HELPER="$(mktemp /tmp/cod-relative-mouse.XXXXXX.py)"
-trap 'rm -f "$HELPER"' EXIT
-cat > "$HELPER" <<'PY'
-import ctypes
-import sys
-
-x11 = ctypes.cdll.LoadLibrary('libX11.so.6')
-xtst = ctypes.cdll.LoadLibrary('libXtst.so.6')
-
-XErrorHandler = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
-XIOErrorHandler = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p)
-
-@XErrorHandler
-def handle_x_error(display, event):
-    print('Relative mouse X error', flush=True)
-    return 0
-
-@XIOErrorHandler
-def handle_x_io_error(display):
-    print('Relative mouse X IO error', flush=True)
-    return 0
-
-x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
-x11.XOpenDisplay.restype = ctypes.c_void_p
-x11.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
-x11.XSync.restype = ctypes.c_int
-x11.XSetErrorHandler.argtypes = [XErrorHandler]
-x11.XSetErrorHandler.restype = ctypes.c_void_p
-x11.XSetIOErrorHandler.argtypes = [XIOErrorHandler]
-x11.XSetIOErrorHandler.restype = ctypes.c_void_p
-xtst.XTestFakeRelativeMotionEvent.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_ulong]
-xtst.XTestFakeRelativeMotionEvent.restype = ctypes.c_int
-xtst.XTestFakeButtonEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
-xtst.XTestFakeButtonEvent.restype = ctypes.c_int
-
-x11.XSetErrorHandler(handle_x_error)
-x11.XSetIOErrorHandler(handle_x_io_error)
-display = x11.XOpenDisplay(None)
-if not display:
-    raise SystemExit('could not open DISPLAY')
-
-print('Relative mouse helper ready', flush=True)
-
-def clamp(value):
-    return max(-2000, min(2000, int(value)))
-
-for line in sys.stdin:
-    parts = line.split()
-    if not parts:
-        continue
-    try:
-        if parts[0] == 'm' and len(parts) == 3:
-            dx = clamp(parts[1])
-            dy = clamp(parts[2])
-            if dx or dy:
-                xtst.XTestFakeRelativeMotionEvent(display, dx, dy, 0, 0)
-                x11.XSync(display, 0)
-        elif parts[0] == 'b' and len(parts) == 3:
-            button = max(1, min(7, int(parts[1])))
-            down = 1 if int(parts[2]) else 0
-            xtst.XTestFakeButtonEvent(display, button, down, 0)
-            x11.XSync(display, 0)
-    except Exception as exc:
-        print('Relative mouse input error:', type(exc).__name__, exc, flush=True)
-PY
-exec python3 -u "$HELPER"
-`;
-  const remoteProgram = String.raw`import json
-import os
-import shutil
-import subprocess
-import sys
-import threading
-import tempfile
-import textwrap
-import time
-
-HOME = os.environ.get('HOME') or '/home/karel'
-BIN_DIR = os.path.join(HOME, '.local', 'bin')
-WM_DIR = os.path.join(HOME, '.local', 'codehs-wm')
-RUNTIME_DIR = os.path.join(HOME, '.local', 'run')
-DESKTOP_ENV_FILE = os.path.join(HOME, '.cod-desktop-env')
-DBUS_BUS_PATH = os.path.join(RUNTIME_DIR, 'bus')
-DBUS_BUS_ADDRESS = 'unix:path=' + DBUS_BUS_PATH
-os.makedirs(BIN_DIR, exist_ok=True)
-os.makedirs(WM_DIR, exist_ok=True)
-os.makedirs(RUNTIME_DIR, exist_ok=True)
-os.chmod(RUNTIME_DIR, 0o700)
-os.environ['PATH'] = BIN_DIR + ':' + os.environ.get('PATH', '')
-os.environ['DISPLAY'] = ':99'
-os.environ['XDG_RUNTIME_DIR'] = RUNTIME_DIR
-os.environ['DBUS_SESSION_BUS_ADDRESS'] = DBUS_BUS_ADDRESS
-os.environ['NO_AT_BRIDGE'] = '1'
-os.environ['GTK_A11Y'] = 'none'
-os.environ['GTK_MODULES'] = ''
-
-GRAPHICS_WIDTH = 1920
-GRAPHICS_HEIGHT = 1080
-
-def say(*parts):
-    print(*parts, flush=True)
-
-def say_block(label, text):
-    if not text:
-        return
-    print(label, flush=True)
-    print(text[:2000].rstrip(), flush=True)
-
-def run(cmd, timeout=60, cwd=None, env=None, quiet=False):
-    if not quiet:
-        say('$', ' '.join(cmd))
-    try:
-        p = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout, cwd=cwd, env=env)
-        if not quiet:
-            say('Command finished with exit code', p.returncode)
-        if not quiet:
-            say_block('Output:', p.stdout)
-            say_block('Errors:', p.stderr)
-        return p.returncode == 0, p.stdout, p.stderr
-    except Exception as exc:
-        if not quiet:
-            say('Command failed:', type(exc).__name__, str(exc))
-        return False, '', str(exc)
-
-def sh_quote(value):
-    return "'" + value.replace("'", "'\"'\"'") + "'"
-
-def write_desktop_env():
-    with open(DESKTOP_ENV_FILE, 'w') as f:
-        for key in ['DISPLAY', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS', 'NO_AT_BRIDGE', 'GTK_A11Y', 'GTK_MODULES']:
-            f.write('export {}={}\n'.format(key, sh_quote(os.environ.get(key, ''))))
-
-def start_session_bus():
-    run(['pkill', '-f', 'dbus-daemon --session --address=' + DBUS_BUS_ADDRESS], timeout=5, quiet=True)
-    try:
-        os.remove(DBUS_BUS_PATH)
-    except FileNotFoundError:
-        pass
-    except Exception as exc:
-        say('Warning: could not remove stale D-Bus socket', type(exc).__name__, str(exc))
-
-    start_background(
-        ['dbus-daemon', '--session', '--address=' + DBUS_BUS_ADDRESS, '--nofork', '--nopidfile'],
-        '/tmp/cod-dbus.log',
-    )
-    deadline = time.time() + 5
-    while time.time() < deadline:
-        if os.path.exists(DBUS_BUS_PATH):
-            say('Session D-Bus is ready:', DBUS_BUS_ADDRESS)
-            return
-        time.sleep(0.1)
-    say('Warning: session D-Bus socket did not appear')
-
-def download(url, path, timeout=120):
-    return run(['curl', '-L', '--fail', '--max-time', str(timeout - 20), '-o', path, url], timeout=timeout)[0]
-
-def extract_jwm():
-    candidate = os.path.join(WM_DIR, 'usr', 'bin', 'jwm')
-    if os.path.exists(candidate):
-        return candidate
-    deb = os.path.join(tempfile.mkdtemp(prefix='cod-jwm-'), 'jwm.deb')
-    urls = [
-        'https://mirrors.kernel.org/ubuntu/pool/universe/j/jwm/jwm_2.4.0-2_amd64.deb',
-        'https://archive.ubuntu.com/ubuntu/pool/universe/j/jwm/jwm_2.4.0-2_amd64.deb',
-    ]
-    for url in urls:
-        if download(url, deb, 90):
-            ok, _out, _err = run(['dpkg-deb', '-x', deb, WM_DIR], timeout=60)
-            if ok and os.path.exists(candidate):
-                os.chmod(candidate, os.stat(candidate).st_mode | 0o111)
-                return candidate
-    return None
-
-def start_background(cmd, log_path, cwd=None):
-    log = open(log_path, 'ab', buffering=0)
-    return subprocess.Popen(
-        cmd,
-        cwd=cwd,
-        stdin=subprocess.DEVNULL,
-        stdout=log,
-        stderr=subprocess.STDOUT,
-        start_new_session=True,
-    )
-
-def wait_for_display(timeout=8):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        ok, _out, _err = run(['xdpyinfo', '-display', ':99'], timeout=2, quiet=True)
-        if ok:
-            return True
-        time.sleep(0.25)
-    return False
-
-def restart_graphics_stack():
-    say('Restarting graphics stack at', f'{GRAPHICS_WIDTH}x{GRAPHICS_HEIGHT}')
-    for pattern in [
-        'websockify 1337 :5900',
-        'x11vnc .* -display :99',
-        '/usr/bin/Xvfb :99',
-    ]:
-        run(['pkill', '-f', pattern], timeout=5, quiet=True)
-    time.sleep(1)
-    for path in ['/tmp/.X99-lock', '/tmp/.X11-unix/X99']:
-        try:
-            os.remove(path)
-        except FileNotFoundError:
-            pass
-        except Exception as exc:
-            say('Warning: could not remove display lock', path, type(exc).__name__, str(exc))
-
-    start_background(
-        [
-            '/usr/bin/Xvfb',
-            ':99',
-            '-screen',
-            '0',
-            f'{GRAPHICS_WIDTH}x{GRAPHICS_HEIGHT}x16',
-            '-ac',
-            '+extension',
-            'GLX',
-            '+extension',
-            'RANDR',
-        ],
-        '/tmp/cod-xvfb.log',
-    )
-    if not wait_for_display():
-        say('Error: Xvfb display did not become ready')
-        sys.exit(5)
-    run(['xrandr', '-d', ':99', '--current'], timeout=5)
-    start_background(
-        ['x11vnc', '-noxrecord', '-xrandr', '-noncache', '-display', ':99', '-forever', '-rfbport', '5900'],
-        '/tmp/cod-x11vnc.log',
-    )
-    time.sleep(1)
-    start_background(
-        ['/usr/bin/python3.8', '-m', 'websockify', '1337', ':5900'],
-        '/tmp/cod-websockify.log',
-        cwd='/usr/local/websockify',
-    )
-    time.sleep(2)
-    say('Graphics stack is ready at', f'{GRAPHICS_WIDTH}x{GRAPHICS_HEIGHT}')
-
-def write_jwmrc(path):
-    with open(path, 'w') as f:
-        f.write(textwrap.dedent('''\
-            <?xml version="1.0"?>
-            <JWM>
-              <RootMenu onroot="123">
-                <Restart label="Restart JWM"/>
-                <Exit label="Exit JWM" confirm="false"/>
-              </RootMenu>
-              <Group>
-                <Name>Navigator</Name>
-                <Class>firefox</Class>
-                <Class>Firefox</Class>
-                <Option>maximized</Option>
-                <Option>noborder</Option>
-                <Option>notitle</Option>
-              </Group>
-              <Group>
-                <Name>PrismLauncher</Name>
-                <Class>PrismLauncher</Class>
-                <Class>prismlauncher</Class>
-                <Option>maximized</Option>
-              </Group>
-              <Group>
-                <Option>tiled</Option>
-                <Option>aerosnap</Option>
-              </Group>
-              <WindowStyle decorations="motif">
-                <Font>Sans-10</Font>
-                <Width>1</Width>
-                <Height>20</Height>
-                <Corner>0</Corner>
-                <Foreground>#81b69f</Foreground>
-                <Background>#001e14</Background>
-                <Outline>#001e14</Outline>
-                <Active>
-                  <Foreground>#daffec</Foreground>
-                  <Background>#002c1f</Background>
-                  <Outline>#002c1f</Outline>
-                </Active>
-              </WindowStyle>
-              <TitleButtonOrder>tx</TitleButtonOrder>
-              <Tray autohide="true" x="0" y="-1" height="1"></Tray>
-              <FocusModel>click</FocusModel>
-              <MoveMode>opaque</MoveMode>
-              <ResizeMode>opaque</ResizeMode>
-              <DoubleClickSpeed>400</DoubleClickSpeed>
-              <DoubleClickDelta>2</DoubleClickDelta>
-              <Mouse context="title" button="1">move</Mouse>
-              <Mouse context="title" button="11">maximize</Mouse>
-              <Mouse context="close" button="1">close</Mouse>
-              <Key key="A-Tab">nextstacked</Key>
-              <Key key="A-F4">close</Key>
-            </JWM>
-        '''))
-
-def get_window_title(window_id):
-    ok, out, _err = run(['xprop', '-id', window_id, '_NET_WM_NAME', 'WM_NAME'], timeout=2, quiet=True)
-    if not ok:
-        return ''
-    for line in out.splitlines():
-        if ' = ' not in line:
-            continue
-        _key, value = line.split(' = ', 1)
-        if value.startswith('"') and value.endswith('"'):
-            return value[1:-1]
-    return ''
-
-def list_windows():
-    ok, out, _err = run(['xprop', '-root', '_NET_CLIENT_LIST'], timeout=2, quiet=True)
-    if not ok or '#' not in out:
-        return []
-    ids = [part.strip().rstrip(',') for part in out.split('#', 1)[1].split(',')]
-    windows = []
-    for window_id in ids:
-        if not window_id.startswith('0x'):
-            continue
-        title = get_window_title(window_id) or 'Untitled window'
-        windows.append({'id': window_id, 'title': title})
-    return windows
-
-def watch_windows():
-    previous = None
-    while True:
-        windows = list_windows()
-        current = json.dumps(windows, sort_keys=True)
-        if current != previous:
-            say('COD_WINDOWS', current)
-            previous = current
-        time.sleep(1)
-
-say('Starting desktop services')
-write_desktop_env()
-start_session_bus()
-restart_graphics_stack()
-try:
-    subprocess.run(['xsetroot', '-solid', '#00120a'], timeout=5)
-except Exception:
-    pass
-
-jwm = extract_jwm()
-if not jwm:
-    say('Error: could not install the window manager')
-    sys.exit(2)
-say('Window manager is ready:', jwm)
-
-jwmrc = os.path.join(tempfile.mkdtemp(prefix='cod-jwmrc-'), 'jwmrc')
-write_jwmrc(jwmrc)
-env = os.environ.copy()
-env['PATH'] = os.path.dirname(jwm) + ':' + BIN_DIR + ':' + env.get('PATH', '')
-wm = subprocess.Popen([jwm, '-f', jwmrc], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
-time.sleep(1)
-if wm.poll() is not None:
-    say('Error: window manager exited during startup with code', wm.returncode)
-    sys.exit(3)
-say('Desktop is ready')
-threading.Thread(target=watch_windows, daemon=True).start()
-
-while True:
-    if wm.poll() is not None:
-        say('Error: window manager stopped with code', wm.returncode)
-        sys.exit(4)
-    time.sleep(5)
-`;
-
+  const withDesktopEnv = (command: string) =>
+    `${desktopEnvCommand}\n${command}`;
   let { uid, appWindow, session }: Props = $props();
   let loading = $state(true);
   let latestDisplaySize: ScreenSize | undefined;
@@ -618,7 +73,10 @@ while True:
   let relativeMouseDy = 0;
   let relativeMouseFlushTimer = 0;
   let relativeMouseHintTimer = 0;
-  const taskOutputHandlers = new Map<string, NonNullable<TaskTerminalOptions['onOutput']>>();
+  const taskOutputHandlers = new Map<
+    string,
+    NonNullable<TaskTerminalOptions['onOutput']>
+  >();
 
   const openTerminalApp = (tab = activeTerminalTab) => {
     activeTerminalTab = tab;
@@ -632,7 +90,9 @@ while True:
 
   const loadScript = (document: Document, src: string) =>
     new Promise<void>((resolve, reject) => {
-      const existing = [...document.scripts].find((script) => script.src === src);
+      const existing = [...document.scripts].find(
+        (script) => script.src === src,
+      );
       if (existing) {
         resolve();
         return;
@@ -657,7 +117,8 @@ while True:
     const emitResize = () => {
       timer = 0;
       const size = getWindowDisplaySize();
-      if (lastSize?.width === size.width && lastSize.height === size.height) return;
+      if (lastSize?.width === size.width && lastSize.height === size.height)
+        return;
       lastSize = size;
       onResize(size);
     };
@@ -695,7 +156,9 @@ while True:
       if (!(canvas instanceof HTMLCanvasElement)) return false;
 
       canvasObserver?.disconnect();
-      const observer = new MutationObserver(() => syncCanvasLogicalSize(screen));
+      const observer = new MutationObserver(() =>
+        syncCanvasLogicalSize(screen),
+      );
       canvasObserver = observer;
       observer.observe(canvas, {
         attributes: true,
@@ -786,7 +249,11 @@ while True:
     const handleMouseButton = (event: MouseEvent) => {
       if (!hasPointerLock()) return;
       const button = remoteButtonForMouseEvent(event);
-      if (button) session.input(RELATIVE_MOUSE_ID, `b ${button} ${event.type === 'mousedown' ? 1 : 0}\n`);
+      if (button)
+        session.input(
+          RELATIVE_MOUSE_ID,
+          `b ${button} ${event.type === 'mousedown' ? 1 : 0}\n`,
+        );
       event.preventDefault();
       event.stopImmediatePropagation();
     };
@@ -799,21 +266,40 @@ while True:
 
     screen.addEventListener('mousedown', requestPointerLock, { capture: true });
     document.addEventListener('mousemove', handleMouseMove, { capture: true });
-    document.addEventListener('pointermove', handleMouseMove, { capture: true });
-    document.addEventListener('mousedown', handleMouseButton, { capture: true });
+    document.addEventListener('pointermove', handleMouseMove, {
+      capture: true,
+    });
+    document.addEventListener('mousedown', handleMouseButton, {
+      capture: true,
+    });
     document.addEventListener('mouseup', handleMouseButton, { capture: true });
-    document.addEventListener('contextmenu', handleContextMenu, { capture: true });
+    document.addEventListener('contextmenu', handleContextMenu, {
+      capture: true,
+    });
     document.addEventListener('pointerlockchange', updatePointerLockState);
 
     return () => {
-      screen.removeEventListener('mousedown', requestPointerLock, { capture: true });
-      document.removeEventListener('mousemove', handleMouseMove, { capture: true });
-      document.removeEventListener('pointermove', handleMouseMove, { capture: true });
-      document.removeEventListener('mousedown', handleMouseButton, { capture: true });
-      document.removeEventListener('mouseup', handleMouseButton, { capture: true });
-      document.removeEventListener('contextmenu', handleContextMenu, { capture: true });
+      screen.removeEventListener('mousedown', requestPointerLock, {
+        capture: true,
+      });
+      document.removeEventListener('mousemove', handleMouseMove, {
+        capture: true,
+      });
+      document.removeEventListener('pointermove', handleMouseMove, {
+        capture: true,
+      });
+      document.removeEventListener('mousedown', handleMouseButton, {
+        capture: true,
+      });
+      document.removeEventListener('mouseup', handleMouseButton, {
+        capture: true,
+      });
+      document.removeEventListener('contextmenu', handleContextMenu, {
+        capture: true,
+      });
       document.removeEventListener('pointerlockchange', updatePointerLockState);
-      if (relativeMouseFlushTimer) appWindow.clearTimeout(relativeMouseFlushTimer);
+      if (relativeMouseFlushTimer)
+        appWindow.clearTimeout(relativeMouseFlushTimer);
       relativeMouseFlushTimer = 0;
       relativeMouseEnabled = false;
     };
@@ -844,7 +330,8 @@ while True:
       rfb.addEventListener('disconnect', (event) => {
         if (connected) console.warn('[rfb] disconnected', event);
         connected = false;
-        if (!reconnectTimer) reconnectTimer = appWindow.setTimeout(connect, 1000);
+        if (!reconnectTimer)
+          reconnectTimer = appWindow.setTimeout(connect, 1000);
       });
 
       rfb.addEventListener('connect', () => {
@@ -912,7 +399,8 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
     const json = line.slice(REMOTE_WINDOWS.length).trim();
     try {
       const windows = (JSON.parse(json) as RemoteWindow[]).filter(
-        (window) => typeof window.id === 'string' && typeof window.title === 'string',
+        (window) =>
+          typeof window.id === 'string' && typeof window.title === 'string',
       );
       const windowsById = new Map(windows.map((window) => [window.id, window]));
       const orderedWindows = remoteWindows
@@ -920,13 +408,18 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
         .filter((window): window is RemoteWindow => !!window);
 
       for (const window of windows) {
-        if (!orderedWindows.some((orderedWindow) => orderedWindow.id === window.id)) {
+        if (
+          !orderedWindows.some(
+            (orderedWindow) => orderedWindow.id === window.id,
+          )
+        ) {
           orderedWindows.push(window);
         }
       }
 
       remoteWindows = orderedWindows;
-      if (orderedWindows.some(isRelativeMouseCandidateWindow)) showRelativeMouseToast();
+      if (orderedWindows.some(isRelativeMouseCandidateWindow))
+        showRelativeMouseToast();
     } catch (error) {
       console.warn('[wm] failed to parse windows', error, line);
     }
@@ -939,7 +432,8 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
   };
 
   const spawnDesktop = (onDesktopWindowsReady: () => void) => {
-    const command = 'set -e\nsource "./.pyvenv311/bin/activate"\npython -B "$MAIN_FILE"';
+    const command =
+      'set -e\nsource "./.pyvenv311/bin/activate"\npython -B "$MAIN_FILE"';
 
     startTaskTerminal({
       id: 'task-desktop',
@@ -971,7 +465,8 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
       type: 'echopty',
       track: false,
       onOutput: (_stream, text) => {
-        if (text.includes('Relative mouse helper ready')) relativeMouseReady = true;
+        if (text.includes('Relative mouse helper ready'))
+          relativeMouseReady = true;
       },
     });
   };
@@ -1041,7 +536,8 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
 
     return () => {
       detachRelativeMouse();
-      if (relativeMouseHintTimer) appWindow.clearTimeout(relativeMouseHintTimer);
+      if (relativeMouseHintTimer)
+        appWindow.clearTimeout(relativeMouseHintTimer);
       relativeMouseHintTimer = 0;
       showRelativeMouseHint = false;
       vncScreen = undefined;
@@ -1050,7 +546,8 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
 
   const focusVncScreen = () => {
     const canvas = vncScreen?.querySelector('canvas');
-    if (canvas instanceof HTMLCanvasElement) canvas.focus({ preventScroll: true });
+    if (canvas instanceof HTMLCanvasElement)
+      canvas.focus({ preventScroll: true });
   };
 
   const focusTerminalApp = () => {
@@ -1060,7 +557,8 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
     terminal?.focus({ preventScroll: true });
   };
 
-  const shellsCount = () => terminals.filter((terminal) => terminal.kind === 'terminal').length;
+  const shellsCount = () =>
+    terminals.filter((terminal) => terminal.kind === 'terminal').length;
 
   const hasRemoteWindowNamed = (name: string) =>
     remoteWindows.some((window) => window.title.toLowerCase().includes(name));
@@ -1157,7 +655,6 @@ xprop -root _NET_SUPPORTING_WM_CHECK >/dev/null
   ];
 
   const launchTerminal = () => {
-
     const id = `terminal-${Date.now()}`;
     terminals = [
       ...terminals,
@@ -1274,7 +771,10 @@ PY`,
       terminal.id === id
         ? {
             ...terminal,
-            running: stream === 'system' && text.includes('exited') ? false : terminal.running,
+            running:
+              stream === 'system' && text.includes('exited')
+                ? false
+                : terminal.running,
             lines: [...terminal.lines, { stream, text }].slice(-500),
           }
         : terminal,
@@ -1352,8 +852,13 @@ PY`,
       });
     } catch (error) {
       taskOutputHandlers.delete(id);
-      const spawnError = error instanceof Error ? error : new Error(String(error));
-      markTerminalFinished(id, true, `\nTask failed to start: ${spawnError.message}\n`);
+      const spawnError =
+        error instanceof Error ? error : new Error(String(error));
+      markTerminalFinished(
+        id,
+        true,
+        `\nTask failed to start: ${spawnError.message}\n`,
+      );
       onFailure?.(spawnError);
       return;
     }
@@ -1390,7 +895,6 @@ PY`,
   const sendTerminalInput = (id: string, input: string) => {
     session?.input(id, input);
   };
-
 </script>
 
 <div class="screen" {@attach attachVnc}></div>
@@ -1478,7 +982,11 @@ PY`,
     max-width: calc(100vw - 1.5rem);
     border-radius: 999px;
     padding: 0.45rem 0.75rem;
-    background: color-mix(in srgb, var(--m3c-surface-container-highest) 88%, transparent);
+    background: color-mix(
+      in srgb,
+      var(--m3c-surface-container-highest) 88%,
+      transparent
+    );
     color: var(--m3c-on-surface);
     font-size: 0.8125rem;
     font-weight: 650;
