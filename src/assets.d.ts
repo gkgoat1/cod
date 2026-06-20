@@ -13,6 +13,15 @@ declare module '*.webp' {
   export default url;
 }
 
+declare module '*.sh' {
+  export const script: string;
+}
+
+declare module '*.py' {
+  export const script: string;
+}
+
+
 declare module '*.svelte' {
   import type { ComponentType, SvelteComponent } from 'svelte';
 
