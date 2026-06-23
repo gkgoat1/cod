@@ -73,7 +73,8 @@ export const keyToTerminalInput = (event: KeyboardEvent) => {
   if (event.key === 'Delete') return '\x1b[3~';
   if (event.key === 'PageUp') return '\x1b[5~';
   if (event.key === 'PageDown') return '\x1b[6~';
-  if (event.key.length === 1 && !event.metaKey && !event.altKey) return event.key;
+  if (event.key.length === 1 && !event.metaKey && !event.altKey)
+    return event.key;
   return undefined;
 };
 
