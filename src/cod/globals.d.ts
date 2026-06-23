@@ -8,5 +8,9 @@ type RfbClient = {
 };
 
 interface Window {
-  RFB?: new (target: HTMLElement, url: string, options?: Record<string, unknown>) => RfbClient;
+  RFB?: new (
+    target: HTMLElement,
+    url: string,
+    options?: Record<string, unknown>,
+  ) => RfbClient;
 }

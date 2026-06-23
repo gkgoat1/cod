@@ -6,7 +6,8 @@ import type { SpawnSession } from './spawn';
 
 const addLayerRipples = (appWindow: Window) => {
   const ownerWindow = appWindow as Window & typeof globalThis;
-  const { document, HTMLButtonElement, HTMLInputElement, HTMLLabelElement } = ownerWindow;
+  const { document, HTMLButtonElement, HTMLInputElement, HTMLLabelElement } =
+    ownerWindow;
   const activePointerRipples: (() => void)[] = [];
   const activeKeyboardRipples: (() => void)[] = [];
 
@@ -27,11 +28,16 @@ const addLayerRipples = (appWindow: Window) => {
     width: number,
     height: number,
   ) => {
-    if (appWindow.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    if (appWindow.matchMedia('(prefers-reduced-motion: reduce)').matches)
+      return undefined;
 
-    const size = Math.hypot(Math.max(x, width - x), Math.max(y, height - y)) * 2.5;
+    const size =
+      Math.hypot(Math.max(x, width - x), Math.max(y, height - y)) * 2.5;
     const speed = Math.max(Math.min(Math.log(size) * 50, 600), 200);
-    const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'radialGradient');
+    const gradient = document.createElementNS(
+      'http://www.w3.org/2000/svg',
+      'radialGradient',
+    );
     gradient.id = `ripple-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     for (const { offset, opacity } of [
@@ -39,20 +45,29 @@ const addLayerRipples = (appWindow: Window) => {
       { offset: '70%', opacity: '0.12' },
       { offset: '100%', opacity: '0' },
     ]) {
-      const stop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+      const stop = document.createElementNS(
+        'http://www.w3.org/2000/svg',
+        'stop',
+      );
       stop.setAttribute('offset', offset);
       stop.setAttribute('stop-color', 'currentColor');
       stop.setAttribute('stop-opacity', opacity);
       gradient.appendChild(stop);
     }
 
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const circle = document.createElementNS(
+      'http://www.w3.org/2000/svg',
+      'circle',
+    );
     circle.setAttribute('cx', `${x}`);
     circle.setAttribute('cy', `${y}`);
     circle.setAttribute('r', '0');
     circle.setAttribute('fill', `url(#${gradient.id})`);
 
-    const expand = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+    const expand = document.createElementNS(
+      'http://www.w3.org/2000/svg',
+      'animate',
+    );
     expand.setAttribute('attributeName', 'r');
     expand.setAttribute('from', '0');
     expand.setAttribute('to', `${size / 2}`);
@@ -78,7 +93,10 @@ const addLayerRipples = (appWindow: Window) => {
     node.appendChild(svg);
 
     return () => {
-      const fade = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+      const fade = document.createElementNS(
+        'http://www.w3.org/2000/svg',
+        'animate',
+      );
       fade.setAttribute('attributeName', 'opacity');
       fade.setAttribute('from', '1');
       fade.setAttribute('to', '0');
@@ -123,11 +141,19 @@ const addLayerRipples = (appWindow: Window) => {
     const layer = target?.closest('.m3-layer');
     if (!layer || !isEnabled(layer)) return;
 
-    const isActivate = event.key === 'Enter' || (event.key === ' ' && layer.tagName === 'BUTTON');
+    const isActivate =
+      event.key === 'Enter' ||
+      (event.key === ' ' && layer.tagName === 'BUTTON');
     if (!isActivate) return;
 
     const rect = layer.getBoundingClientRect();
-    const cancel = createRippleSvg(layer, rect.width / 2, rect.height / 2, rect.width, rect.height);
+    const cancel = createRippleSvg(
+      layer,
+      rect.width / 2,
+      rect.height / 2,
+      rect.width,
+      rect.height,
+    );
     if (cancel) activeKeyboardRipples.push(cancel);
   });
 
@@ -137,7 +163,11 @@ const addLayerRipples = (appWindow: Window) => {
   });
 };
 
-export const mount = (uid: string, appWindow: Window, session: SpawnSession) => {
+export const mount = (
+  uid: string,
+  appWindow: Window,
+  session: SpawnSession,
+) => {
   const { document } = appWindow;
   document.title = 'New Tab'; // do not edit
 

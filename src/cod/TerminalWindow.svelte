@@ -186,11 +186,7 @@
     </div>
   {:else if activeTerminal()}
     {@const rendered = renderedTerminal(activeTerminal()!)}
-    <AnsiText
-      id={activeTab}
-      text={rendered.text}
-      ranges={rendered.ranges}
-    />
+    <AnsiText id={activeTab} text={rendered.text} ranges={rendered.ranges} />
   {:else}
     <div class="empty terminal-empty">
       <button class="m3-layer" type="button" onclick={onNewTerminal}
