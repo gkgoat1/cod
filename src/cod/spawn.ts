@@ -106,9 +106,10 @@ const createSpawnTracker = (onOutput: SpawnOutputHandler) => {
 
       runningSpawns.delete(eventId);
       const exitData = data?.data as SpawnExitData | number | null | undefined;
-      const code = typeof exitData === 'number'
-        ? exitData
-        : exitData?.code ?? exitData?.exitCode ?? exitData?.status;
+      const code =
+        typeof exitData === 'number'
+          ? exitData
+          : (exitData?.code ?? exitData?.exitCode ?? exitData?.status);
       const signal = typeof exitData === 'number' ? null : exitData?.signal;
 
       if (code === 0 && !signal) {

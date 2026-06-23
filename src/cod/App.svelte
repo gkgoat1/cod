@@ -56,7 +56,8 @@ export NO_AT_BRIDGE=1
 export GTK_A11Y=none
 export GTK_MODULES=
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"`;
-  const withDesktopEnv = (command: string) => `${desktopEnvCommand}\n${command}`;
+  const withDesktopEnv = (command: string) =>
+    `${desktopEnvCommand}\n${command}`;
   const firefoxInstallCommand = String.raw`set -euo pipefail
 echo "Installing Firefox..."
 export PATH="$HOME/.local/bin:$PATH"
@@ -618,7 +619,10 @@ while True:
   let relativeMouseDy = 0;
   let relativeMouseFlushTimer = 0;
   let relativeMouseHintTimer = 0;
-  const taskOutputHandlers = new Map<string, NonNullable<TaskTerminalOptions['onOutput']>>();
+  const taskOutputHandlers = new Map<
+    string,
+    NonNullable<TaskTerminalOptions['onOutput']>
+  >();
 
   const openTerminalApp = (tab = activeTerminalTab) => {
     activeTerminalTab = tab;
@@ -632,7 +636,9 @@ while True:
 
   const loadScript = (document: Document, src: string) =>
     new Promise<void>((resolve, reject) => {
-      const existing = [...document.scripts].find((script) => script.src === src);
+      const existing = [...document.scripts].find(
+        (script) => script.src === src,
+      );
       if (existing) {
         resolve();
         return;
@@ -657,7 +663,8 @@ while True:
     const emitResize = () => {
       timer = 0;
       const size = getWindowDisplaySize();
-      if (lastSize?.width === size.width && lastSize.height === size.height) return;
+      if (lastSize?.width === size.width && lastSize.height === size.height)
+        return;
       lastSize = size;
       onResize(size);
     };
@@ -695,7 +702,9 @@ while True:
       if (!(canvas instanceof HTMLCanvasElement)) return false;
 
       canvasObserver?.disconnect();
-      const observer = new MutationObserver(() => syncCanvasLogicalSize(screen));
+      const observer = new MutationObserver(() =>
+        syncCanvasLogicalSize(screen),
+      );
       canvasObserver = observer;
       observer.observe(canvas, {
         attributes: true,
@@ -786,7 +795,11 @@ while True:
     const handleMouseButton = (event: MouseEvent) => {
       if (!hasPointerLock()) return;
       const button = remoteButtonForMouseEvent(event);
-      if (button) session.input(RELATIVE_MOUSE_ID, `b ${button} ${event.type === 'mousedown' ? 1 : 0}\n`);
+      if (button)
+        session.input(
+          RELATIVE_MOUSE_ID,
+          `b ${button} ${event.type === 'mousedown' ? 1 : 0}\n`,
+        );
       event.preventDefault();
       event.stopImmediatePropagation();
     };
@@ -799,21 +812,40 @@ while True:
 
     screen.addEventListener('mousedown', requestPointerLock, { capture: true });
     document.addEventListener('mousemove', handleMouseMove, { capture: true });
-    document.addEventListener('pointermove', handleMouseMove, { capture: true });
-    document.addEventListener('mousedown', handleMouseButton, { capture: true });
+    document.addEventListener('pointermove', handleMouseMove, {
+      capture: true,
+    });
+    document.addEventListener('mousedown', handleMouseButton, {
+      capture: true,
+    });
     document.addEventListener('mouseup', handleMouseButton, { capture: true });
-    document.addEventListener('contextmenu', handleContextMenu, { capture: true });
+    document.addEventListener('contextmenu', handleContextMenu, {
+      capture: true,
+    });
     document.addEventListener('pointerlockchange', updatePointerLockState);
 
     return () => {
-      screen.removeEventListener('mousedown', requestPointerLock, { capture: true });
-      document.removeEventListener('mousemove', handleMouseMove, { capture: true });
-      document.removeEventListener('pointermove', handleMouseMove, { capture: true });
-      document.removeEventListener('mousedown', handleMouseButton, { capture: true });
-      document.removeEventListener('mouseup', handleMouseButton, { capture: true });
-      document.removeEventListener('contextmenu', handleContextMenu, { capture: true });
+      screen.removeEventListener('mousedown', requestPointerLock, {
+        capture: true,
+      });
+      document.removeEventListener('mousemove', handleMouseMove, {
+        capture: true,
+      });
+      document.removeEventListener('pointermove', handleMouseMove, {
+        capture: true,
+      });
+      document.removeEventListener('mousedown', handleMouseButton, {
+        capture: true,
+      });
+      document.removeEventListener('mouseup', handleMouseButton, {
+        capture: true,
+      });
+      document.removeEventListener('contextmenu', handleContextMenu, {
+        capture: true,
+      });
       document.removeEventListener('pointerlockchange', updatePointerLockState);
-      if (relativeMouseFlushTimer) appWindow.clearTimeout(relativeMouseFlushTimer);
+      if (relativeMouseFlushTimer)
+        appWindow.clearTimeout(relativeMouseFlushTimer);
       relativeMouseFlushTimer = 0;
       relativeMouseEnabled = false;
     };
@@ -844,7 +876,8 @@ while True:
       rfb.addEventListener('disconnect', (event) => {
         if (connected) console.warn('[rfb] disconnected', event);
         connected = false;
-        if (!reconnectTimer) reconnectTimer = appWindow.setTimeout(connect, 1000);
+        if (!reconnectTimer)
+          reconnectTimer = appWindow.setTimeout(connect, 1000);
       });
 
       rfb.addEventListener('connect', () => {
@@ -912,7 +945,8 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
     const json = line.slice(REMOTE_WINDOWS.length).trim();
     try {
       const windows = (JSON.parse(json) as RemoteWindow[]).filter(
-        (window) => typeof window.id === 'string' && typeof window.title === 'string',
+        (window) =>
+          typeof window.id === 'string' && typeof window.title === 'string',
       );
       const windowsById = new Map(windows.map((window) => [window.id, window]));
       const orderedWindows = remoteWindows
@@ -920,13 +954,18 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
         .filter((window): window is RemoteWindow => !!window);
 
       for (const window of windows) {
-        if (!orderedWindows.some((orderedWindow) => orderedWindow.id === window.id)) {
+        if (
+          !orderedWindows.some(
+            (orderedWindow) => orderedWindow.id === window.id,
+          )
+        ) {
           orderedWindows.push(window);
         }
       }
 
       remoteWindows = orderedWindows;
-      if (orderedWindows.some(isRelativeMouseCandidateWindow)) showRelativeMouseToast();
+      if (orderedWindows.some(isRelativeMouseCandidateWindow))
+        showRelativeMouseToast();
     } catch (error) {
       console.warn('[wm] failed to parse windows', error, line);
     }
@@ -939,7 +978,8 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
   };
 
   const spawnDesktop = (onDesktopWindowsReady: () => void) => {
-    const command = 'set -e\nsource "./.pyvenv311/bin/activate"\npython -B "$MAIN_FILE"';
+    const command =
+      'set -e\nsource "./.pyvenv311/bin/activate"\npython -B "$MAIN_FILE"';
 
     startTaskTerminal({
       id: 'task-desktop',
@@ -971,7 +1011,8 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
       type: 'echopty',
       track: false,
       onOutput: (_stream, text) => {
-        if (text.includes('Relative mouse helper ready')) relativeMouseReady = true;
+        if (text.includes('Relative mouse helper ready'))
+          relativeMouseReady = true;
       },
     });
   };
@@ -1041,7 +1082,8 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
 
     return () => {
       detachRelativeMouse();
-      if (relativeMouseHintTimer) appWindow.clearTimeout(relativeMouseHintTimer);
+      if (relativeMouseHintTimer)
+        appWindow.clearTimeout(relativeMouseHintTimer);
       relativeMouseHintTimer = 0;
       showRelativeMouseHint = false;
       vncScreen = undefined;
@@ -1050,7 +1092,8 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
 
   const focusVncScreen = () => {
     const canvas = vncScreen?.querySelector('canvas');
-    if (canvas instanceof HTMLCanvasElement) canvas.focus({ preventScroll: true });
+    if (canvas instanceof HTMLCanvasElement)
+      canvas.focus({ preventScroll: true });
   };
 
   const focusTerminalApp = () => {
@@ -1060,7 +1103,8 @@ xrandr -d :99 --output screen --mode "$MODE" >/dev/null
     terminal?.focus({ preventScroll: true });
   };
 
-  const shellsCount = () => terminals.filter((terminal) => terminal.kind === 'terminal').length;
+  const shellsCount = () =>
+    terminals.filter((terminal) => terminal.kind === 'terminal').length;
 
   const hasRemoteWindowNamed = (name: string) =>
     remoteWindows.some((window) => window.title.toLowerCase().includes(name));
@@ -1157,7 +1201,6 @@ xprop -root _NET_SUPPORTING_WM_CHECK >/dev/null
   ];
 
   const launchTerminal = () => {
-
     const id = `terminal-${Date.now()}`;
     terminals = [
       ...terminals,
@@ -1274,7 +1317,10 @@ PY`,
       terminal.id === id
         ? {
             ...terminal,
-            running: stream === 'system' && text.includes('exited') ? false : terminal.running,
+            running:
+              stream === 'system' && text.includes('exited')
+                ? false
+                : terminal.running,
             lines: [...terminal.lines, { stream, text }].slice(-500),
           }
         : terminal,
@@ -1352,8 +1398,13 @@ PY`,
       });
     } catch (error) {
       taskOutputHandlers.delete(id);
-      const spawnError = error instanceof Error ? error : new Error(String(error));
-      markTerminalFinished(id, true, `\nTask failed to start: ${spawnError.message}\n`);
+      const spawnError =
+        error instanceof Error ? error : new Error(String(error));
+      markTerminalFinished(
+        id,
+        true,
+        `\nTask failed to start: ${spawnError.message}\n`,
+      );
       onFailure?.(spawnError);
       return;
     }
@@ -1390,7 +1441,6 @@ PY`,
   const sendTerminalInput = (id: string, input: string) => {
     session?.input(id, input);
   };
-
 </script>
 
 <div class="screen" {@attach attachVnc}></div>
@@ -1478,7 +1528,11 @@ PY`,
     max-width: calc(100vw - 1.5rem);
     border-radius: 999px;
     padding: 0.45rem 0.75rem;
-    background: color-mix(in srgb, var(--m3c-surface-container-highest) 88%, transparent);
+    background: color-mix(
+      in srgb,
+      var(--m3c-surface-container-highest) 88%,
+      transparent
+    );
     color: var(--m3c-on-surface);
     font-size: 0.8125rem;
     font-weight: 650;

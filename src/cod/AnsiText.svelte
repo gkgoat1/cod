@@ -28,8 +28,12 @@
     let index = 0;
 
     for (const range of ranges) {
-      if (range.start > index) pushPart({ text: text.slice(index, range.start) });
-      pushPart({ className: range.name, text: text.slice(range.start, range.end) });
+      if (range.start > index)
+        pushPart({ text: text.slice(index, range.start) });
+      pushPart({
+        className: range.name,
+        text: text.slice(range.start, range.end),
+      });
       index = range.end;
     }
 
