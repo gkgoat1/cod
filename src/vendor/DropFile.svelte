@@ -1,81 +1,71 @@
 <script lang="ts">
-  import FallbackSvg from './DropFileFallbackSvg.svelte'
+  const { children, multiple, disabled, onDrop, onEnter, onLeave } = $props();
 
-  export let multiple: boolean = false
-  export let disabled: boolean = false
-  export let onDrop: (files: File[]) => void
-  export let onEnter: () => void = () => {}
-  export let onLeave: () => void = () => {}
-
-  let isOver: boolean = false
-  let input: HTMLInputElement
+  let isOver: boolean = false;
+  let input: HTMLInputElement;
 
   const handleEnter = () => {
-    isOver = true
+    isOver = true;
     if (onEnter) {
-      onEnter()
+      onEnter();
     }
-  }
+  };
 
   const handleLeave = () => {
-    isOver = false
+    isOver = false;
     if (onLeave) {
-      onLeave()
+      onLeave();
     }
-  }
+  };
 
   const handleDrop = (e: DragEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
     if (!e?.dataTransfer?.items || disabled) {
-      return
+      return;
     }
-    const items = Array.from(e.dataTransfer.files)
-    onDrop(items)
-    isOver = false
-  }
+    const items = Array.from(e.dataTransfer.files);
+    onDrop(items);
+    isOver = false;
+  };
 
   const handleDragOver = (e: Event) => {
-    e.preventDefault()
-  }
+    e.preventDefault();
+  };
 
   const handleChange = (e: Event) => {
-    e.preventDefault()
-    const files: FileList = <FileList>(<HTMLInputElement>e.target).files
-    onDrop(Array.from(files))
-  }
+    e.preventDefault();
+    const files: FileList = <FileList>(<HTMLInputElement>e.target).files;
+    onDrop(Array.from(files));
+  };
 
   const onClick = () => {
-    input.click()
-  }
+    input.click();
+  };
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
-      input.click()
+      input.click();
     }
-  }
+  };
 </script>
 
 <div
   id="zone"
-  on:drop={handleDrop}
-  on:dragover={handleDragOver}
-  on:dragenter={handleEnter}
-  on:dragleave={handleLeave}
-  on:click={onClick}
-  on:keydown={onKeyDown}
+  ondrop={handleDrop}
+  ondragover={handleDragOver}
+  ondragenter={handleEnter}
+  ondragleave={handleLeave}
+  onclick={onClick}
+  onkeydown={onKeyDown}
   tabIndex={0}
 >
-  <slot>
-    <div id="fallback">
-      <FallbackSvg over={isOver} />
-    </div>
-  </slot>
+  {@render children()}
 </div>
 <input
   id="hidden-input"
   type="file"
-  on:change={handleChange}
+  onchange={handleChange}
   bind:this={input}
   {multiple}
   {disabled}
@@ -88,20 +78,5 @@
   }
   #hidden-input {
     display: none;
-  }
-  #fallback {
-    display: grid;
-    align-items: center;
-    width: 100%;
-    height: 200px;
-    border: black solid 1px;
-    border-radius: 10px;
-    border-style: dashed;
-    border-color: inherit;
-  }
-  #fallback :global(svg) {
-    margin: auto;
-    max-width: 100%;
-    max-height: 100%;
   }
 </style>
