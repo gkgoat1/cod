@@ -6,7 +6,7 @@
   import prismIcon from '../assets/prism-launcher.svg';
   import type { SpawnSession } from './spawn';
   import TerminalWindow from './TerminalWindow.svelte';
-  import DropFile from '@svelte-parts/drop-file';
+  import DropFile from '../vendor/DropFile.svelte';
   import {
     type TerminalLine,
     type TerminalWindow as TerminalWindowModel,

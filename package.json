@@ -35,6 +35,5 @@
     "svelte": "5.55.9"
   },
   "dependencies": {
-    "@svelte-parts/drop-file": "^0.0.23"
   }
 }
