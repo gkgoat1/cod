@@ -33,7 +33,5 @@
     "clsx": "2.1.1",
     "esm-env": "1.2.2",
     "svelte": "5.55.9"
-  },
-  "dependencies": {
   }
 }
