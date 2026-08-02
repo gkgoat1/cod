@@ -1447,7 +1447,8 @@ PY`,
     const transferFiles: Record<string,string> = {};
     let script = '';
     for(const file of files){
-      transferFiles[file.name + '._'] = btoa(String.fromCharCode(...new Uint8Array(await file.arrayBuffer())));
+      const buf = new Uint8Array(await file.arrayBuffer());
+      transferFiles[file.name + '._'] = 'toBase64' in buf ? buf.toBase64() : btoa(String.fromCharCode(...buf));
       script = `${script};cat ${file.name}._ | base64 -d > ${file.name};rm ${file.name}._`
     }
     await session.transfer(transferFiles);
