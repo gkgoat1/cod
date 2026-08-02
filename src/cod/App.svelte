@@ -1444,12 +1444,26 @@ PY`,
   };
 
   const onDrop = async (files: File[]) => {
-    const transferFiles: Record<string,string> = {};
-    let script = '';
+    let transferFiles: Record<string,string> = {};
+    let script = '', n = 0;
     for(const file of files){
       const buf = new Uint8Array(await file.arrayBuffer());
-      transferFiles[file.name + '._'] = 'toBase64' in buf ? buf.toBase64() : btoa(String.fromCharCode(...buf));
-      script = `${script};cat ${file.name}._ | base64 -d > ${file.name};rm ${file.name}._`
+      let str: string = 'toBase64' in buf ? buf.toBase64() : btoa(String.fromCharCode(...buf));
+      while(str){
+        if(JSON.stringify(transferFiles).length >= 900_000){
+          await session.transfer(transferFiles);
+          transferFiles = {};
+          n++;
+        }
+        transferFiles[`${file.name}._${n}`] = str.slice(0,100_000);
+        str = str.slice(100_000);
+        if(str){
+          await session.transfer(transferFiles);
+          transferFiles = {};
+          n++;
+        }
+      }
+      script = `${script};cat ${file.name}._* | base64 -d > ${file.name};rm ${file.name}._*`
     }
     await session.transfer(transferFiles);
     await startTaskTerminal({
