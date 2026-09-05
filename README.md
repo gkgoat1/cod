@@ -11,6 +11,16 @@ Cod creates CodeHS-container computers.
 await import('https://esm.sh/gadidae')
 ```
 
+<details>
+
+<summary>or, if that doesn't work</summary>
+
+```js
+await import("https://fastly.jsdelivr.net/npm/gadidae/+esm")
+```
+
+</details>
+
 3. Press Run
 4. Press Cod
 
